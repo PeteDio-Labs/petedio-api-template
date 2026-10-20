@@ -1,0 +1,47 @@
+# CI — lint, typecheck, test, and compile the artifact a deploy would ship.
+#
+# Copied from templates/bun-app in petedio-workspace. It follows pete-bot's `ci`
+# workflow: one runtime (Bun), no Node, so a test cannot pass on a module the
+# shipped binary lacks. `--frozen-lockfile` fails the job when bun.lock is stale
+# or missing, so an install never silently resolves new versions.
+#
+# Each step runs a package.json script. A script that does not exist fails the
+# step, so a renamed script cannot turn a check into a green no-op.
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          # The floor in package.json's engines.
+          bun-version: 1.4.2
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Lint
+        run: bun run lint
+
+      - name: Type check
+        run: bun run typecheck
+
+      - name: Run tests
+        run: bun run test
+
+      - name: Compile the standalone binary
+        run: |
+          bun run build:binary
+          test -x dist/petedio-bun-template
