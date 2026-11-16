@@ -55,6 +55,13 @@ describe("/health", () => {
     expect(res.status).toBe(503);
     expect(await res.json()).toEqual({ ok: false, db: false });
   });
+  test("/api/health is the same route", async () => {
+    expect((await call(createApp({ verifier, checks: { db: async () => false } }), "/api/health")).status).toBe(503);
+  });
+  test("a check that never answers is down, not a hang", async () => {
+    const hang = () => new Promise<boolean>(() => {});
+    expect((await call(createApp({ verifier, checks: { db: hang } }), "/health")).status).toBe(503);
+  }, 6000);
   test("a check that throws is down, never up", async () => {
     const boom = async () => { throw new Error("refused"); };
     expect((await call(createApp({ verifier, checks: { db: boom } }), "/health")).status).toBe(503);
@@ -72,6 +79,31 @@ describe("Cloudflare Access JWT", () => {
   });
   test("an expired token is 401", async () => {
     expect((await call(app, "/api/me", await token({ exp: 1 }))).status).toBe(401);
+  });
+  test("a token signed by another key is 401", async () => {
+    const other = await crypto.subtle.generateKey(
+      { name: "RSASSA-PKCS1-v1_5", modulusLength: 2048, publicExponent: new Uint8Array([1, 0, 1]), hash: "SHA-256" },
+      true,
+      ["sign", "verify"],
+    );
+    const [h, p] = (await token()).split(".");
+    const sig = await crypto.subtle.sign("RSASSA-PKCS1-v1_5", other.privateKey, new TextEncoder().encode(`${h}.${p}`));
+    expect((await call(app, "/api/me", `${h}.${p}.${b64(sig)}`)).status).toBe(401);
+  });
+  test("a payload edited after signing is 401", async () => {
+    const [h, , s] = (await token()).split(".");
+    const forged = b64(JSON.stringify({ iss: `https://${TEAM}`, aud: [AUD], exp: Math.floor(Date.now() / 1000) + 600, email: "evil@example.test" }));
+    expect((await call(app, "/api/me", `${h}.${forged}.${s}`)).status).toBe(401);
+  });
+  test("an unknown kid is 401", async () => {
+    const [, p, s] = (await token()).split(".");
+    expect((await call(app, "/api/me", `${b64(JSON.stringify({ alg: "RS256", kid: "nope" }))}.${p}.${s}`)).status).toBe(401);
+  });
+  test("alg none and HS256 are 401", async () => {
+    const [, p] = (await token()).split(".");
+    for (const alg of ["none", "HS256"]) {
+      expect((await call(app, "/api/me", `${b64(JSON.stringify({ alg, kid: "k1" }))}.${p}.${b64("x")}`)).status).toBe(401);
+    }
   });
   test("a plain identity header is not trusted", async () => {
     const res = await app(new Request("http://x/api/me", { headers: { "cf-access-authenticated-user-email": "me@example.test" } }));

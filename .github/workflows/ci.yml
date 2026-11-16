@@ -1,6 +1,6 @@
 # CI — lint, typecheck, test, and compile the artifact a deploy would ship.
 #
-# Copied from templates/bun-app in petedio-workspace. It follows pete-bot's `ci`
+# Copied from templates/api in petedio-workspace. It follows pete-bot's `ci`
 # workflow: one runtime (Bun), no Node, so a test cannot pass on a module the
 # shipped binary lacks. `--frozen-lockfile` fails the job when bun.lock is stale
 # or missing, so an install never silently resolves new versions.
@@ -44,10 +44,10 @@ jobs:
       - name: Compile the standalone binary
         run: |
           bun run build:binary
-          test -x dist/petedio-bun-template
+          test -x dist/petedio-api-template
 
       # Auth never falls open: with no Access settings the binary must refuse to start, exit code 2.
       - name: Smoke-test the binary
         run: |
-          rc=0; ./dist/petedio-bun-template || rc=$?
+          rc=0; ./dist/petedio-api-template || rc=$?
           test "$rc" -eq 2
