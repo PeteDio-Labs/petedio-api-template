@@ -27,7 +27,7 @@ export function createApp({ verifier, checks = {} }: Deps) {
       await Promise.all(
         entries.map(async ([name, check]) => {
           flags[name] = await Promise.race([
-            check().catch(() => false),
+            Promise.resolve().then(check).catch(() => false), // also catches a check that throws before it returns a promise
             new Promise<boolean>((r) => setTimeout(() => r(false), CHECK_TIMEOUT_MS)),
           ]);
         }),
