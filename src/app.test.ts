@@ -62,6 +62,11 @@ describe("/health", () => {
     const hang = () => new Promise<boolean>(() => {});
     expect((await call(createApp({ verifier, checks: { db: hang } }), "/health")).status).toBe(503);
   }, 6000);
+  test("a check that throws synchronously is down", async () => {
+    const res = await call(createApp({ verifier, checks: { db: () => { throw new Error("unavailable"); } } }), "/health");
+    expect(res.status).toBe(503);
+    expect(await res.json()).toEqual({ ok: false, db: false });
+  });
   test("a check that throws is down, never up", async () => {
     const boom = async () => { throw new Error("refused"); };
     expect((await call(createApp({ verifier, checks: { db: boom } }), "/health")).status).toBe(503);
